@@ -17,27 +17,29 @@ load_dotenv(dotenv_path=env_path)
 
 
 def _ejecutar_envio_async(email, server, port, user, password):
-    """Función interna que corre en segundo plano sin trabar a Flask"""
+    """Función interna que corre en segundo plano usando el puerto estándar 587"""
     try:
-        # Intentamos resolver por IPv4 dinámico
-        direcciones = socket.getaddrinfo(server, int(port), socket.AF_INET, socket.SOCK_STREAM)
-        ip_ipv4 = direcciones[0][4][0]
+        print(f" [SMTP Async] Iniciando intento de envío a través de {server}:587...")
         
-        # Conexión con un timeout corto de 8 segundos
-        with smtplib.SMTP_SSL(ip_ipv4, int(port), timeout=8) as smtp:
+        # Conectamos de forma normal por el puerto 587
+        with smtplib.SMTP(server, 587, timeout=10) as smtp:
+            smtp.ehlo()       # Saludo inicial al servidor
+            smtp.starttls()   # Ciframos la conexión de forma segura (TLS)
+            smtp.ehlo()       # Volvemos a saludar ya cifrados
             smtp.login(user, password)
             smtp.send_message(email)
-            print(" [SMTP Async] Correo enviado con éxito en segundo plano.")
+            print(" [SMTP Async] ¡CORREO ENVIADO CON ÉXITO EN SEGUNDO PLANO! 🎉")
+            
     except Exception as e:
-        # Se queda registrado en los logs de Render, pero ya no tumba la petición HTTP
-        print(f" [SMTP Async Error] No se pudo mandar el correo en segundo plano: {e}")
+        # Esto saldrá en tus logs de Render si algo truena, sin congelar la página del cliente
+        print(f" [SMTP Async Error] Falló el envío en segundo plano: {e}")
 
 
 def _enviar(subject, contenido, destinatario=None):
     user = os.getenv("MAIL_USER")
     password = os.getenv("MAIL_PASSWORD")
     server = os.getenv("MAIL_SERVER", "smtp.gmail.com")
-    port = os.getenv("MAIL_PORT", "465")
+    port = os.getenv("MAIL_PORT", "587")
 
     if not user or not password:
         print(" [SMTP Error] Falta configuración de credenciales de correo.")
