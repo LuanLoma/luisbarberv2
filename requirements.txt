@@ -3,7 +3,4 @@ flask-cors
 mysql-connector-python
 python-dotenv
 Werkzeug
-<<<<<<< HEAD
 gunicorn
-=======
->>>>>>> 6d3040d5c6511909c252cfc0e0e5dbfcb414c49f
