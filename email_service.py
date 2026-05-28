@@ -1,6 +1,7 @@
 import os
 import smtplib
-import socket  # <-- ADICIÓN: Importamos socket para controlar la resolución de red
+import socket
+import threading  # <-- ADICIÓN: Para correr el envío en segundo plano
 from email.message import EmailMessage
 from dotenv import load_dotenv
 
@@ -8,12 +9,28 @@ from dotenv import load_dotenv
 base_dir = os.path.abspath(os.path.dirname(__file__))
 env_path = os.path.join(base_dir, '.env')
 
-# Si el .env está en la carpeta padre (raíz del backend), subimos un nivel:
 if not os.path.exists(env_path):
     env_path = os.path.join(base_dir, '..', '.env')
 
 load_dotenv(dotenv_path=env_path)
 # ------------------------------------------------
+
+
+def _ejecutar_envio_async(email, server, port, user, password):
+    """Función interna que corre en segundo plano sin trabar a Flask"""
+    try:
+        # Intentamos resolver por IPv4 dinámico
+        direcciones = socket.getaddrinfo(server, int(port), socket.AF_INET, socket.SOCK_STREAM)
+        ip_ipv4 = direcciones[0][4][0]
+        
+        # Conexión con un timeout corto de 8 segundos
+        with smtplib.SMTP_SSL(ip_ipv4, int(port), timeout=8) as smtp:
+            smtp.login(user, password)
+            smtp.send_message(email)
+            print(" [SMTP Async] Correo enviado con éxito en segundo plano.")
+    except Exception as e:
+        # Se queda registrado en los logs de Render, pero ya no tumba la petición HTTP
+        print(f" [SMTP Async Error] No se pudo mandar el correo en segundo plano: {e}")
 
 
 def _enviar(subject, contenido, destinatario=None):
@@ -22,18 +39,14 @@ def _enviar(subject, contenido, destinatario=None):
     server = os.getenv("MAIL_SERVER", "smtp.gmail.com")
     port = os.getenv("MAIL_PORT", "465")
 
-    # Validación de control para ver en consola si fallan las variables
     if not user or not password:
-        raise Exception(
-            f"Error crítico: No se pudieron cargar las credenciales desde el archivo .env. "
-            f"Ruta buscada: {os.path.abspath(env_path)}"
-        )
+        print(" [SMTP Error] Falta configuración de credenciales de correo.")
+        return
 
     email = EmailMessage()
     email["Subject"] = subject
     email["From"] = user
     
-    # Si es una lista o tupla, los une separados por comas para enviar a múltiples buzones
     if isinstance(destinatario, (list, tuple)):
         email["To"] = ", ".join(destinatario)
     else:
@@ -41,22 +54,15 @@ def _enviar(subject, contenido, destinatario=None):
         
     email.set_content(contenido)
 
-    try:
-        # --- SOLUCIÓN DE RED PARA RENDER (FORZAR IPv4) ---
-        # Obligamos a resolver el servidor (ej: smtp.gmail.com) usando estrictamente IPv4 (AF_INET)
-        direcciones = socket.getaddrinfo(server, int(port), socket.AF_INET, socket.SOCK_STREAM)
-        ip_ipv4 = direcciones[0][4][0]  # Extrae la IP limpia directamente de la respuesta
-        print(f"Conectando de forma segura mediante IPv4 forzado: {ip_ipv4}")
-
-        # Pasamos la IP resuelta a SMTP_SSL con un timeout preventivo de 10 segundos
-        with smtplib.SMTP_SSL(ip_ipv4, int(port), timeout=10) as smtp:
-            smtp.login(user, password)
-            smtp.send_message(email)
-            print("Correo enviado con éxito.")
-            
-    except Exception as e:
-        print(f"Error detectado en el proceso de envío de correo SMTP_SSL: {e}")
-        raise e
+    # --- TRUCO MAESTRO: DISPARAR HILO EN SEGUNDO PLANO ---
+    # Creamos un hilo independiente para que Flask continúe su camino de inmediato
+    hilo_correo = threading.Thread(
+        target=_ejecutar_envio_async, 
+        args=(email, server, port, user, password)
+    )
+    hilo_correo.daemon = True  # Permite que el hilo muera si el servidor principal se apaga
+    hilo_correo.start()
+    print(" [SMTP] El envío se delegó a un hilo en segundo plano de forma exitosa.")
 
 
 def enviar_correo_contacto(nombre, correo, mensaje):
@@ -87,12 +93,8 @@ Hora: {data.get("hora")}
 Comentarios:
 {data.get("comentarios", "Sin comentarios")}
 """
-    # Recuperamos tu correo de administrador configurado en el .env
     correo_barbero = os.getenv("MAIL_TO") or os.getenv("MAIL_USER")
     correo_cliente = data.get("correo")
     
-    # Creamos una lista con ambos correos para que se envíe en conjunto
     destinatarios = [correo_cliente, correo_barbero]
-    
-    # Se invoca la función pasando la lista unificada
     _enviar("Confirmacion de cita - Luis Barber", contenido, destinatarios)
