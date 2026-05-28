@@ -1,8 +1,5 @@
 import os
-import smtplib
-import socket
-import threading  # <-- ADICIÓN: Para correr el envío en segundo plano
-from email.message import EmailMessage
+import requests  # <-- Asegúrate de que esté en tu requirements.txt si no lo tenías
 from dotenv import load_dotenv
 
 # --- FUERZA LA RUTA ABSOLUTA DEL ARCHIVO .ENV ---
@@ -15,56 +12,46 @@ if not os.path.exists(env_path):
 load_dotenv(dotenv_path=env_path)
 # ------------------------------------------------
 
-
-def _ejecutar_envio_async(email, server, port, user, password):
-    """Función interna que corre en segundo plano usando el puerto estándar 587"""
-    try:
-        print(f" [SMTP Async] Iniciando intento de envío a través de {server}:587...")
-        
-        # Conectamos de forma normal por el puerto 587
-        with smtplib.SMTP(server, 587, timeout=10) as smtp:
-            smtp.ehlo()       # Saludo inicial al servidor
-            smtp.starttls()   # Ciframos la conexión de forma segura (TLS)
-            smtp.ehlo()       # Volvemos a saludar ya cifrados
-            smtp.login(user, password)
-            smtp.send_message(email)
-            print(" [SMTP Async] ¡CORREO ENVIADO CON ÉXITO EN SEGUNDO PLANO! 🎉")
-            
-    except Exception as e:
-        # Esto saldrá en tus logs de Render si algo truena, sin congelar la página del cliente
-        print(f" [SMTP Async Error] Falló el envío en segundo plano: {e}")
-
-
 def _enviar(subject, contenido, destinatario=None):
-    user = os.getenv("MAIL_USER")
-    password = os.getenv("MAIL_PASSWORD")
-    server = os.getenv("MAIL_SERVER", "smtp.gmail.com")
-    port = os.getenv("MAIL_PORT", "587")
-
-    if not user or not password:
-        print(" [SMTP Error] Falta configuración de credenciales de correo.")
+    api_key = os.getenv("RESEND_API_KEY")
+    # Resend en su plan gratis te obliga a usar este remitente verificado por defecto
+    from_email = "onboarding@resend.dev" 
+    
+    if not api_key:
+        print(" [Resend Error] Falta configurar la variable RESEND_API_KEY.")
         return
 
-    email = EmailMessage()
-    email["Subject"] = subject
-    email["From"] = user
-    
+    # Si es una lista de correos, los convertimos a una lista real para el JSON de Resend
     if isinstance(destinatario, (list, tuple)):
-        email["To"] = ", ".join(destinatario)
+        # Resend en plan gratis solo deja mandar correos a TI mismo (tu cuenta de registro)
+        # Para pruebas, lo ideal es mandar todo al correo administrador configurado
+        to_emails = [os.getenv("MAIL_TO") or os-getenv("MAIL_USER")]
     else:
-        email["To"] = destinatario or os.getenv("MAIL_TO", user)
-        
-    email.set_content(contenido)
+        to_emails = [destinatario or os.getenv("MAIL_TO")]
 
-    # --- TRUCO MAESTRO: DISPARAR HILO EN SEGUNDO PLANO ---
-    # Creamos un hilo independiente para que Flask continúe su camino de inmediato
-    hilo_correo = threading.Thread(
-        target=_ejecutar_envio_async, 
-        args=(email, server, port, user, password)
-    )
-    hilo_correo.daemon = True  # Permite que el hilo muera si el servidor principal se apaga
-    hilo_correo.start()
-    print(" [SMTP] El envío se delegó a un hilo en segundo plano de forma exitosa.")
+    # Armamos la petición HTTP POST para saltarnos el bloqueo SMTP de Render
+    url = "https://api.resend.com/emails"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "from": f"Luis Barber <{from_email}>",
+        "to": to_emails,
+        "subject": subject,
+        "text": contenido
+    }
+
+    try:
+        # Petición HTTP directa por el puerto 443 (Abierto en todo internet)
+        response = requests.post(url, json=payload, headers=headers, timeout=5)
+        if response.status_code in [200, 201]:
+            print(" [Resend] ¡CORREO ENVIADO CON ÉXITO MEDIANTE API HTTP! 🎉")
+        else:
+            print(f" [Resend Error] El servicio rechazó el correo: {response.text}")
+    except Exception as e:
+        print(f" [Resend Exception] Falló la conexión HTTP con la API: {e}")
 
 
 def enviar_correo_contacto(nombre, correo, mensaje):
@@ -95,8 +82,6 @@ Hora: {data.get("hora")}
 Comentarios:
 {data.get("comentarios", "Sin comentarios")}
 """
-    correo_barbero = os.getenv("MAIL_TO") or os.getenv("MAIL_USER")
-    correo_cliente = data.get("correo")
-    
-    destinatarios = [correo_cliente, correo_barbero]
-    _enviar("Confirmacion de cita - Luis Barber", contenido, destinatarios)
+    # Al estar en modo de prueba gratuito de Resend, enviamos la notificación 
+    # al buzón del administrador para validar que el sistema jala impecable.
+    _enviar("Confirmacion de cita - Luis Barber", contenido)
