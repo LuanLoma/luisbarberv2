@@ -19,7 +19,9 @@ def _enviar(subject, contenido, destinatario=None):
     user = os.getenv("MAIL_USER")
     password = os.getenv("MAIL_PASSWORD")
     server = os.getenv("MAIL_SERVER")
-    port = os.getenv("MAIL_PORT", "587")
+    
+    # MODIFICACIÓN: Cambiamos el puerto por defecto al 465 para usar SSL directo en Render
+    port = os.getenv("MAIL_PORT", "465")
 
     # Validación de control para ver en consola si fallan las variables
     if not user or not password:
@@ -32,7 +34,7 @@ def _enviar(subject, contenido, destinatario=None):
     email["Subject"] = subject
     email["From"] = user
     
-    # MODIFICACIÓN: Si es una lista o tupla, los une separados por comas para enviar a múltiples buzones
+    # Si es una lista o tupla, los une separados por comas para enviar a múltiples buzones
     if isinstance(destinatario, (list, tuple)):
         email["To"] = ", ".join(destinatario)
     else:
@@ -40,10 +42,15 @@ def _enviar(subject, contenido, destinatario=None):
         
     email.set_content(contenido)
 
-    with smtplib.SMTP(server, int(port)) as smtp:
-        smtp.starttls()
-        smtp.login(user, password)
-        smtp.send_message(email)
+    # MODIFICACIÓN DEFINITIVA: Usamos SMTP_SSL con un timeout de 10 segundos para evitar congelar el servidor
+    try:
+        with smtplib.SMTP_SSL(server, int(port), timeout=10) as smtp:
+            smtp.login(user, password)
+            smtp.send_message(email)
+            print("Correo enviado con éxito.")
+    except Exception as e:
+        print(f"Error detectado en el proceso de envío de correo SMTP_SSL: {e}")
+        raise e
 
 
 def enviar_correo_contacto(nombre, correo, mensaje):
