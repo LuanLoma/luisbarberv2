@@ -14,11 +14,11 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "luis_barber_desarrollo")
 
-# Habilitamos CORS permitiendo el flujo de cookies/sesiones tanto en local como en producción
+# Habilitamos CORS flexible para desarrollo local y producción en Render
 CORS(app, supports_credentials=True, origins=[
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://luisbarbercln.onrender.com"  # Asegúrate de que esta sea la URL exacta de tu frontend en Render
+    "https://luisbarbercln.onrender.com"
 ])
 
 
@@ -99,7 +99,7 @@ def desactivar_servicio(id):
         if filas_afectadas == 0:
             return jsonify({"mensaje": "Servicio no encontrado"}), 404
 
-        return jsonify({"mensaje": "Servicio desactivado correctamente"}), 200
+        return jsonify({"mensaje": "Servicio deactivated correctamente"}), 200
     except Exception as e:
         return jsonify({"mensaje": "Error al desactivar servicio", "error": str(e)}), 500
 
