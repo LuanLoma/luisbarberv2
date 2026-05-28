@@ -14,8 +14,12 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "luis_barber_desarrollo")
 
-# Habilitamos CORS permitiendo el flujo de cookies/sesiones desde el frontend en Vue
-CORS(app, supports_credentials=True, origins=["http://localhost:5173", "http://127.0.0.1:5173"])
+# Habilitamos CORS permitiendo el flujo de cookies/sesiones tanto en local como en producción
+CORS(app, supports_credentials=True, origins=[
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://luis-barber-client.onrender.com"  # Asegúrate de que esta sea la URL exacta de tu frontend en Render
+])
 
 
 @app.route("/")
@@ -283,7 +287,4 @@ def contacto():
 
 
 if __name__ == "__main__":
-    # Activamos debug=True para desarrollo local rápido
     app.run(debug=True, port=5000)
-
-    
