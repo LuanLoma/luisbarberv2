@@ -16,9 +16,10 @@ app.secret_key = os.getenv("SECRET_KEY", "luis_barber_desarrollo")
 
 # Habilitamos CORS flexible para desarrollo local y producción en Render
 CORS(app, supports_credentials=True, origins=[
+    "https://luisbarbercln.onrender.com",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://luisbarbercln.onrender.com"
+    "https://luisbarbercln.onrender.com/"  
 ])
 
 
