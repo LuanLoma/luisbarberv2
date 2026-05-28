@@ -12,14 +12,22 @@ from email_service import enviar_correo_cita, enviar_correo_contacto
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "luis_barber_desarrollo")
+
+# 1. SECRET_KEY FIJA: Si no está en el .env, usa una cadena fija para que Render no te cierre sesión al reiniciar el contenedor
+app.secret_key = os.getenv("SECRET_KEY", "luis_barber_produccion_segura_12345")
+
+# 2. CONFIGURACIÓN DE COOKIES DE SESIÓN PARA PRODUCCIÓN CRUZADA (CORS)
+app.config.update(
+    SESSION_COOKIE_SAMESITE="None",  # Permite enviar la cookie entre dominios cruzados (Front -> Back)
+    SESSION_COOKIE_SECURE=True,     # Obligatorio para SameSite="None" (Funciona solo bajo HTTPS en Render)
+    SESSION_COOKIE_HTTPONLY=True    # Evita que scripts maliciosos de JS lean la cookie
+)
 
 # Habilitamos CORS flexible para desarrollo local y producción en Render
 CORS(app, supports_credentials=True, origins=[
     "https://luisbarbercln.onrender.com",
     "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "https://luisbarbercln.onrender.com/"  
+    "http://127.0.0.1:5173"
 ])
 
 
@@ -123,7 +131,6 @@ def obtener_citas():
         cursor.close()
         conexion.close()
 
-        # Sanitización de tipos de datos complejos para la correcta conversión a JSON
         for cita in citas:
             if 'fecha' in cita and isinstance(cita['fecha'], (datetime.date, datetime.datetime)):
                 cita['fecha'] = cita['fecha'].isoformat()
@@ -166,7 +173,6 @@ def crear_cita():
         conexion = get_connection()
         cursor = conexion.cursor(dictionary=True)
         
-        # Validamos que el servicio seleccionado exista y esté activo
         cursor.execute(
             "SELECT id, nombre, precio FROM servicios WHERE id = %s AND activo = TRUE",
             (int(data.get("servicio_id")),),
@@ -178,7 +184,6 @@ def crear_cita():
             conexion.close()
             return jsonify({"errores": ["Selecciona un servicio activo."]}), 400
 
-        # Insertamos la cita en la base de datos
         cursor.execute(
             """
             INSERT INTO citas
@@ -200,7 +205,6 @@ def crear_cita():
         cursor.close()
         conexion.close()
 
-        # Envío asíncrono de correo controlado con bloque try/except
         mensaje_correo = "Se envió la confirmación por correo."
         try:
             enviar_correo_cita(data, servicio)
@@ -236,7 +240,6 @@ def login():
         if not usuario or not verificar_password(data.get("password"), usuario["password"]):
             return jsonify({"mensaje": "Correo o contraseña incorrectos"}), 401
 
-        # Almacenamiento en sesión de Flask
         session["usuario_id"] = usuario["id"]
         session["nombreUsuario"] = usuario["nombre"]
         session["correo"] = usuario["correo"]
@@ -258,11 +261,21 @@ def login():
 
 @app.route("/sesion", methods=["GET"])
 def obtener_sesion():
+    # MODIFICACIÓN: Si no hay sesión válida, respondemos un 401 explícito para que el front sepa qué hacer
+    if not session.get("autenticado"):
+        return jsonify({
+            "nombreUsuario": "Invitado",
+            "correo": None,
+            "rol": "cliente",
+            "autenticado": False,
+            "mensaje": "No hay ninguna sesión activa actualmente."
+        }), 401
+
     return jsonify({
-        "nombreUsuario": session.get("nombreUsuario", "Invitado"),
+        "nombreUsuario": session.get("nombreUsuario"),
         "correo": session.get("correo"),
-        "rol": session.get("rol", "cliente"),
-        "autenticado": bool(session.get("autenticado")),
+        "rol": session.get("rol"),
+        "autenticado": True,
     }), 200
 
 
