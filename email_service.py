@@ -69,6 +69,7 @@ Mensaje:
 
 
 def enviar_correo_cita(data, servicio):
+    # Formateamos el contenido con los datos que puso el cliente en la página
     contenido = f"""Cita registrada en Luis Barber.
 
 Cliente: {data.get("cliente")}
@@ -82,6 +83,12 @@ Hora: {data.get("hora")}
 Comentarios:
 {data.get("comentarios", "Sin comentarios")}
 """
-    # Al estar en modo de prueba gratuito de Resend, enviamos la notificación 
-    # al buzón del administrador para validar que el sistema jala impecable.
-    _enviar("Confirmacion de cita - Luis Barber", contenido)
+    
+    # MODIFICACIÓN DE ORO: 
+    # Forzamos a que el destinatario sea TU correo verificado de Resend.
+    # Así te llegará la notificación con toda la info del cliente a ti, 
+    # y Resend no te tirará el error 403.
+    correo_destino = "luanloma13@gmail.com"
+    
+    # Se invoca la función pasando tu correo como único destino
+    _enviar(f"Confirmacion de cita - {data.get('cliente')}", contenido, correo_destino)
