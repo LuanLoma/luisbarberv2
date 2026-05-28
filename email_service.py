@@ -1,5 +1,6 @@
 import os
 import smtplib
+import socket  # <-- ADICIÓN: Importamos socket para controlar la resolución de red
 from email.message import EmailMessage
 from dotenv import load_dotenv
 
@@ -18,9 +19,7 @@ load_dotenv(dotenv_path=env_path)
 def _enviar(subject, contenido, destinatario=None):
     user = os.getenv("MAIL_USER")
     password = os.getenv("MAIL_PASSWORD")
-    server = os.getenv("MAIL_SERVER")
-    
-    # MODIFICACIÓN: Cambiamos el puerto por defecto al 465 para usar SSL directo en Render
+    server = os.getenv("MAIL_SERVER", "smtp.gmail.com")
     port = os.getenv("MAIL_PORT", "465")
 
     # Validación de control para ver en consola si fallan las variables
@@ -42,12 +41,19 @@ def _enviar(subject, contenido, destinatario=None):
         
     email.set_content(contenido)
 
-    # MODIFICACIÓN DEFINITIVA: Usamos SMTP_SSL con un timeout de 10 segundos para evitar congelar el servidor
     try:
-        with smtplib.SMTP_SSL(server, int(port), timeout=10) as smtp:
+        # --- SOLUCIÓN DE RED PARA RENDER (FORZAR IPv4) ---
+        # Obligamos a resolver el servidor (ej: smtp.gmail.com) usando estrictamente IPv4 (AF_INET)
+        direcciones = socket.getaddrinfo(server, int(port), socket.AF_INET, socket.SOCK_STREAM)
+        ip_ipv4 = direcciones[0][4][0]  # Extrae la IP limpia directamente de la respuesta
+        print(f"Conectando de forma segura mediante IPv4 forzado: {ip_ipv4}")
+
+        # Pasamos la IP resuelta a SMTP_SSL con un timeout preventivo de 10 segundos
+        with smtplib.SMTP_SSL(ip_ipv4, int(port), timeout=10) as smtp:
             smtp.login(user, password)
             smtp.send_message(email)
             print("Correo enviado con éxito.")
+            
     except Exception as e:
         print(f"Error detectado en el proceso de envío de correo SMTP_SSL: {e}")
         raise e
