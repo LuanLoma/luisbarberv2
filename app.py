@@ -13,17 +13,18 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# 1. SECRET_KEY FIJA: Si no está en el .env, usa una cadena fija para que Render no te cierre sesión al reiniciar el contenedor
+# 1. SECRET_KEY FIJA
 app.secret_key = os.getenv("SECRET_KEY", "luis_barber_produccion_segura_12345")
 
-# 2. CONFIGURACIÓN DE COOKIES DE SESIÓN PARA PRODUCCIÓN CRUZADA (CORS)
+# 2. CONFIGURACIÓN DE COOKIES DE SESIÓN (DEBE IR ANTES DE CORS)
 app.config.update(
-    SESSION_COOKIE_SAMESITE="None",  # Permite enviar la cookie entre dominios cruzados (Front -> Back)
-    SESSION_COOKIE_SECURE=True,     # Obligatorio para SameSite="None" (Funciona solo bajo HTTPS en Render)
-    SESSION_COOKIE_HTTPONLY=True    # Evita que scripts maliciosos de JS lean la cookie
+    SESSION_COOKIE_SAMESITE="None",   # Permite enviar la cookie entre dominios cruzados (Front -> Back)
+    SESSION_COOKIE_SECURE=True,       # Obligatorio para SameSite="None" (Funciona bajo HTTPS en Render)
+    SESSION_COOKIE_HTTPONLY=True,     # Evita que scripts maliciosos de JS lean la cookie
+    PERMANENT_SESSION_LIFETIME=datetime.timedelta(days=1)  # La sesión dura 1 día activa
 )
 
-# Habilitamos CORS flexible para desarrollo local y producción en Render
+# 3. INICIALIZACIÓN DE CORS
 CORS(app, supports_credentials=True, origins=[
     "https://luisbarbercln.onrender.com",
     "http://localhost:5173",
@@ -240,6 +241,8 @@ def login():
         if not usuario or not verificar_password(data.get("password"), usuario["password"]):
             return jsonify({"mensaje": "Correo o contraseña incorrectos"}), 401
 
+        # MODIFICACIÓN: Forzamos a que la sesión sea permanente (duración del timedelta configurado arriba)
+        session.permanent = True
         session["usuario_id"] = usuario["id"]
         session["nombreUsuario"] = usuario["nombre"]
         session["correo"] = usuario["correo"]
@@ -261,7 +264,6 @@ def login():
 
 @app.route("/sesion", methods=["GET"])
 def obtener_sesion():
-    # MODIFICACIÓN: Si no hay sesión válida, respondemos un 401 explícito para que el front sepa qué hacer
     if not session.get("autenticado"):
         return jsonify({
             "nombreUsuario": "Invitado",
