@@ -18,7 +18,7 @@ app.secret_key = os.getenv("SECRET_KEY", "luis_barber_desarrollo")
 CORS(app, supports_credentials=True, origins=[
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://luis-barber-client.onrender.com"  # Asegúrate de que esta sea la URL exacta de tu frontend en Render
+    "https://luisbarbercln.onrender.com"  # Asegúrate de que esta sea la URL exacta de tu frontend en Render
 ])
 
 
